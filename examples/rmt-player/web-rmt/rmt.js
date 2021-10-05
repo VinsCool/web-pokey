@@ -323,7 +323,7 @@ class RMTInstrument {
         let trep = data[1]
         let eend = data[2]
         let erep = data[3]
-        this.tspd = (data[4] & 0x3f) + 1
+        this.tspd = data[4] & 0x3f
         this.tmode = (data[4] >> 6) & 1
         this.ttype = (data[4] >> 7) & 1
         this.audctl = data[5]
@@ -353,12 +353,13 @@ class RMTTune {
         this.tpos = 0
         this.is_repeating = false
 
-        this.tcnt = 0
+        this.tspd = this.instrument.tspd
         this.vib_table = VIB_TABLE[instrument.vibrato]
         this.vib_index = 0
         this.shiftfrq = 0
         this.filter = 1
         this.pokey_idx = channel < 4 ? 0 : 1
+        this.table_note = this.instrument.table[this.tpos]
     }
 
     play(player) {
@@ -475,6 +476,7 @@ class RMTTune {
 
         let vol = this.channel < 4 ? env_lvol : env_rvol
         var audc = VOLUME_TAB[player.getChannelVolume(this.channel) << 4 | vol] | (env_dist << 4)
+
         this.epos += 1
         if(this.epos >= envelope.length / 3) {
             this.epos = this.instrument.ego
@@ -488,6 +490,20 @@ class RMTTune {
             } else {
                 this.eff_delay -= 1
             }
+        }
+        if(this.tspd < 0) {
+            this.tspd = this.instrument.tspd
+            this.tpos += 1
+            if(this.tpos >= this.instrument.table.length) {
+                this.tpos = this.instrument.tgo
+            }
+            if(this.instrument.tmode) {
+                this.table_note = (this.table_note + this.instrument.table[this.tpos]) & 0xff
+            } else {
+                this.table_note = this.instrument.table[this.tpos]
+            }
+        } else {
+            this.tspd -= 1
         }
 
         var frqaddcmd2 = 0
@@ -514,11 +530,11 @@ class RMTTune {
                 // TODO portamento
                 if(this.instrument.ttype == 0) {
                     // cmd5a1
-                    note = (this.note + this.instrument.table[this.tpos]) & 0xff
+                    note = (this.note + this.table_note) & 0xff
                     if(note > 61) note = 63
                     portafrqc = freq_table[note]
                 } else {
-                    portafrqc = (freq_table[this.note] + this.instrument.table[this.tpos]) & 0xff
+                    portafrqc = (freq_table[this.note] + this.table_note) & 0xff
                 }
                 // cmd5ax
                 let portafrqa = !env_xy ? portafrqc : null
@@ -548,7 +564,7 @@ class RMTTune {
         }
         if(note != null) {
             if(this.instrument.ttype == 0) { // notes
-                note = (note + this.instrument.table[this.tpos]) & 0xff
+                note = (note + this.table_note) & 0xff
                 if(note > 61) {
                     note = 63
                     audc = 0
@@ -560,7 +576,7 @@ class RMTTune {
                     note = 63
                     audc = 0
                 }
-                audf = (freq_table[note] + frqaddcmd2 + this.instrument.table[this.tpos] + this.shiftfrq) & 0xff
+                audf = (freq_table[note] + frqaddcmd2 + this.table_note + this.shiftfrq) & 0xff
             }
         }
         let frq = player.portamento[this.channel].freq()
@@ -571,14 +587,6 @@ class RMTTune {
         player.setPokeyAudf(this.channel, audf)
         player.setPokeyAudc(this.channel, audc)
         player.updatePokeyAudctl(this.pokey_idx, this.instrument.audctl)
-
-        this.tcnt = (this.tcnt + 1) % this.instrument.tspd
-        if(!this.tcnt) {
-            this.tpos += 1
-            if(this.tpos >= this.instrument.table.length) {
-                this.tpos = this.instrument.tgo
-            }
-        }
     }
 
     postPlay(player, prev_audctl) {
