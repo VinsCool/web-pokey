@@ -290,8 +290,8 @@ CMD: ${commands}
  Y\\: ${ys}
   F: ${filters}
   P: ${portas}
-  
-TABLE OF NOTES: |${Array.from(i.table).map(hex2).join(" ")}|
+
+TABLE OF NOTES: |${instrument.table.map(hex2).join(" ")}|
         `).appendTo(cont)
 
         return cont;
@@ -310,7 +310,8 @@ TABLE OF NOTES: |${Array.from(i.table).map(hex2).join(" ")}|
         if(note >=0 && note < 61) {
             let instr_index = parseInt($("#instrument").val())
             let octave = parseInt($("#octave").val())
-            rmt_player.tune(1, instr_index, octave + note, 15)
+            rmt_player.resetStartTime(RMTPlayer.INTERACTIVE_LATENCY)
+            rmt_player.tune(3, octave + note, instr_index, 15)
         }
     })
 
